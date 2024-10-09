@@ -1,3 +1,7 @@
 llogin/target/
+llogin/debug/
+llogin/vendor/
 llogin/Cargo.lock
 llogin/doc/
+*.pdb
+**/*.rs.bk

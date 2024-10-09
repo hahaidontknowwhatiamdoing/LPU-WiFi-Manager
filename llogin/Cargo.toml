@@ -11,6 +11,8 @@ license = "MIT"
 
 [dependencies]
 dirs-next = "2.0.0"
+ureq = { version = "2.6", features = ["json", "charset", "native-tls"] }
+native-tls = "0.2"
 
 [package.metadata.deb]
 maintainer = "smazmi <sadiquemobaraka5@gmail.com>"
