@@ -1,18 +1,24 @@
 [package]
+
 name = "llogin"
-version = "0.1.2"
+version = "0.2.1"
 authors = ["smazmi"]
 edition = "2021"
 description = "LPU WiFi Manager: A CLI tool for managing Lovely Professional University WiFi connections."
-readme = "DOCS.md"
+readme = "README.md"
 license = "MIT"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+keywords = ["wifi", "login", "cli", "network", "credentials"]
+categories = ["command-line-utilities"]
+repository = "https://github.com/smazmi/LPU-WiFi-Manager"
+documentation = "https://docs.rs/llogin"
 
 [dependencies]
 dirs-next = "2.0.0"
 ureq = { version = "2.6", features = ["json", "charset", "native-tls"] }
 native-tls = "0.2"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
+rpassword = "7.3.1"
 
 [package.metadata.deb]
 maintainer = "smazmi <sadiquemobaraka5@gmail.com>"
@@ -22,5 +28,5 @@ depends = "$auto"
 section = "utility"
 assets = [
   ["target/release/llogin", "usr/bin/","755"],
-  ["DOCS.md","usr/share/doc/llogin/README","644"],
+  ["README.md","usr/share/doc/llogin/README","644"], 
 ]

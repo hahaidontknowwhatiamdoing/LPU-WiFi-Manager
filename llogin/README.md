@@ -21,8 +21,9 @@ llogin
 
 - `--help` or `-h`: Show the help message.
 - `--version` or `-v`: Show the version of the program.
-- `--account` or `-a`: Perform LPU login with the provided account ID.
+- `--account <account_id>` or `-a <account_id>`: Perform LPU login with the provided account ID.
 - `--list` or `-l`: List all stored account IDs.
+- `--logout <account_id>` or `-lg <account_id>`: Perform logout with the provided account ID.
 
 ## Installation
 

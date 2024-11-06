@@ -1,18 +1,123 @@
-use dirs_next::home_dir;
-use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
+//! Credential management module for LPU WiFi Manager
+//!
+//! This module handles secure storage and retrieval of WiFi credentials:
+//! - Stores credentials in system-specific config directories
+//! - Manages multiple account credentials
+//! - Provides JSON-based persistent storage
 
+use dirs_next::config_dir;
+use rpassword::read_password;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufReader, BufWriter, Write};
+use std::path::PathBuf;
+
+/// Represents stored credentials for an LPU WiFi account
+#[derive(Serialize, Deserialize)]
+pub struct Credentials {
+    /// LPU username without @lpu.com suffix
+    pub username: String,
+    /// Account password
+    pub password: String,
+}
+
+/// Type alias for a HashMap storing account IDs mapped to their credentials
+type CredentialsMap = HashMap<String, Credentials>;
+
+/// Gets the path to the credentials file in the system config directory
+///
+/// # Returns
+/// A PathBuf pointing to credentials.json in the system-specific config location:
+/// - Linux: ~/.config/llogin/credentials.json
+/// - Windows: %APPDATA%/llogin/credentials.json
+///
+/// # Panics
+/// Panics if:
+/// - Unable to determine system config directory
+/// - Unable to create llogin directory
+fn get_credentials_file_path() -> PathBuf {
+    let config_dir = config_dir().expect("Failed to get config directory");
+    let llogin_dir = config_dir.join("llogin");
+    if !llogin_dir.exists() {
+        fs::create_dir_all(&llogin_dir).expect("Failed to create llogin directory");
+    }
+    llogin_dir.join("credentials.json")
+}
+
+/// Reads stored credentials from the credentials file
+///
+/// # Returns
+/// A HashMap containing account IDs mapped to their credentials.
+/// Returns an empty HashMap if no credentials file exists.
+///
+/// # Panics
+/// Panics if:
+/// - Unable to open credentials file
+/// - File contains invalid JSON
+/// - JSON doesn't match expected credential format
+pub fn read_credentials() -> CredentialsMap {
+    let path = get_credentials_file_path();
+    if path.exists() {
+        let file = File::open(path).expect("Failed to open credentials file");
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader).expect("Failed to read credentials")
+    } else {
+        HashMap::new()
+    }
+}
+
+/// Writes credentials to the credentials file
+///
+/// # Arguments
+/// * `credentials` - HashMap containing account IDs and their credentials
+///
+/// # Panics
+/// Panics if:
+/// - Unable to open/create credentials file
+/// - Unable to write to file
+/// - Unable to serialize credentials to JSON
+fn write_credentials(credentials: &CredentialsMap) {
+    let path = get_credentials_file_path();
+    let file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)
+        .expect("Failed to open credentials file");
+    let writer = BufWriter::new(file);
+    serde_json::to_writer(writer, credentials).expect("Failed to write credentials");
+}
+
+/// Prompts user for and stores new LPU WiFi credentials
+///
+/// Interactively asks for:
+/// - Account identifier
+/// - LPU username
+/// - LPU password
+///
+/// The password is read securely without echo.
+/// Credentials are stored in the system config directory.
+///
+/// # Example
+/// ```no_run
+/// llogin::credentials::store_lpu_credentials();
+/// // Enter a unique identifier for this account: myaccount
+/// // Enter your LPU username: 12345678
+/// // Enter your LPU password: ****
+/// ```
+///
+/// # Notes
+/// - Will not overwrite existing credentials for the same account ID
+/// - Password is never displayed on screen
 pub fn store_lpu_credentials() {
     print!("Enter a unique identifier for this account: ");
     io::stdout().flush().unwrap();
     let account_id = prompt_for_account_id();
 
-    let username_var = format!("LPU_USERNAME_{}", account_id);
-    let password_var = format!("LPU_PASSWORD_{}", account_id);
+    let mut credentials = read_credentials();
 
-    if env::var(&username_var).is_ok() || env::var(&password_var).is_ok() {
+    if credentials.contains_key(&account_id) {
         println!("Credentials already exist for account ID '{}'.", account_id);
         return;
     }
@@ -24,92 +129,30 @@ pub fn store_lpu_credentials() {
 
     print!("Enter your LPU password: ");
     io::stdout().flush().unwrap();
-    let mut password = String::new();
-    io::stdin().read_line(&mut password).unwrap();
+    let password = read_password().unwrap();
 
-    env::set_var(&username_var, username.trim());
-    env::set_var(&password_var, password.trim());
+    credentials.insert(
+        account_id.clone(),
+        Credentials {
+            username: username.trim().to_string(),
+            password: password.trim().to_string(),
+        },
+    );
 
-    // Write credentials to file
-    let home_dir = home_dir().expect("Failed to get home directory");
-    let lpu_creds_path = home_dir.join(".lpu_creds");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open(lpu_creds_path)
-        .unwrap();
+    write_credentials(&credentials);
 
-    if let Err(e) = writeln!(file, "export {}=\"{}\"", username_var, username.trim()) {
-        eprintln!("Couldn't write to file: {}", e);
-    }
-    if let Err(e) = writeln!(file, "export {}=\"{}\"", password_var, password.trim()) {
-        eprintln!("Couldn't write to file: {}", e);
-    }
-
-    update_shell_config();
-
-    println!("LPU username and password have been stored securely. Reload the current shell or open a new one to use it :)");
+    println!("LPU username and password have been stored securely.");
 }
 
+/// Prompts for and reads an account identifier from stdin
+///
+/// # Returns
+/// The trimmed account identifier string entered by the user
+///
+/// # Panics
+/// Panics if unable to read from stdin
 fn prompt_for_account_id() -> String {
     let mut account_id = String::new();
     io::stdin().read_line(&mut account_id).unwrap();
     account_id.trim().to_string()
-}
-
-fn update_shell_config() {
-    let home_dir = home_dir().expect("Failed to get home directory");
-    let shell_config = determine_shell_config(&home_dir);
-
-    if let Some(config_path) = shell_config {
-        let file = File::open(&config_path).unwrap();
-        let reader = BufReader::new(file);
-
-        if !reader
-            .lines()
-            .any(|line| line.unwrap() == "source ~/.lpu_creds")
-        {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open(&config_path)
-                .unwrap();
-
-            if let Err(e) = writeln!(file, "source ~/.lpu_creds") {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-    }
-}
-
-fn determine_shell_config(home_dir: &Path) -> Option<std::path::PathBuf> {
-    let zshrc_in_home = home_dir.join(".zshrc");
-    let zshrc_in_config = home_dir.join(".config/zsh/.zshrc");
-
-    match env::var("SHELL") {
-        Ok(val) => {
-            if val.contains("bash") {
-                Some(home_dir.join(".bashrc"))
-            } else if val.contains("zsh") {
-                if zshrc_in_home.exists() {
-                    Some(zshrc_in_home)
-                } else if zshrc_in_config.exists() {
-                    Some(zshrc_in_config)
-                } else {
-                    println!("Could not find .zshrc file. Please manually set the environment variables.");
-                    None
-                }
-            } else if val.contains("fish") {
-                Some(home_dir.join(".config/fish/config.fish"))
-            } else {
-                println!("Unsupported shell. Please manually set the environment variables.");
-                None
-            }
-        }
-        Err(_) => {
-            println!("Couldn't determine shell.");
-            None
-        }
-    }
 }
