@@ -5,21 +5,22 @@
 <img src="./assets/llogin.png" alt="Logo" width="300">
 </p>
 <br>
-This is a command-line tool for managing LPU WiFi connections, written in Rust. It's a rewrite of the original Bash script by 
+This is a command-line tool for managing LPU WiFi connections, written in Rust. It's a Rust rewrite of the original Bash script by 
 <a href="https://github.com/Ba3a-G">Ba3a-G</a>. You can find the original repository <a href="https://github.com/Ba3a-G/LPU-Wireless-Autologin">here</a>. I thank Ba3a-G for their original work.
 
 The tool provides several commands:
 
 - `--help` or `-h`: Show the help message.
 - `--version` or `-v`: Show the version of the program.
-- `--account` or `-a`: Perform LPU login with the provided account ID.
+- `--account <account_id>` or `-a <account_id>`: Perform LPU login with the provided account ID.
 - `--list` or `-l`: List all stored account IDs.
+- `--logout <account_id>` or `-lg <account_id>`: Logout from the current session.
 
 If no command is provided, the tool will prompt the user for an account ID and perform LPU login.
 
 The tool checks if the user is connected to LPU WiFi before performing any operations. If the user is not connected to LPU WiFi, the tool will exit with an error message.
 
-The tool stores LPU credentials in environment variables and writes them to a file. The file is updated every time the user stores new credentials.
+The tool stores LPU credentials in a file located in the system-specific config directory. The file is updated every time the user stores new credentials. This tool is cross-platform and supports both Windows and Linux.
 
 ## 🛠️ Installation
 

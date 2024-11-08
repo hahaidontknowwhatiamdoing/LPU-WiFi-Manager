@@ -2,12 +2,17 @@
 
 LPU WiFi Manager is a command-line tool for managing Lovely Professional University WiFi connections.
 
+[![Crates.io](https://img.shields.io/crates/v/llogin.svg)](https://crates.io/crates/llogin)
+[![Documentation](https://docs.rs/llogin/badge.svg)](https://docs.rs/llogin)
+
 ## Features
 
-- Check if you're connected to LPU WiFi.
-- Perform LPU login with a provided account ID.
-- List all stored account IDs.
-- Store LPU credentials securely.
+- Store multiple LPU WiFi credentials securely
+- Cross-platform support for Windows and Linux
+- Login to LPU WiFi network
+- Logout from LPU WiFi network
+- List stored accounts
+- Secure credential storage in system config directory
 
 ## Usage
 

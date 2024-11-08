@@ -14,20 +14,8 @@
 //! llogin --logout <myaccount>   # Logout from account
 //! llogin --list    # List stored accounts
 //! ```
-mod cli;
-mod credentials;
-mod login;
-mod wifi;
 
-use std::env;
-use std::process;
-
-fn main() {
-    if !wifi::check_lpu_wifi() {
-        println!("Not connected to LPU WiFi. Exiting.");
-        process::exit(1);
-    }
-
-    let args: Vec<String> = env::args().collect();
-    cli::handle_args(args);
-}
+pub mod cli;
+pub mod credentials;
+pub mod login;
+pub mod wifi;
