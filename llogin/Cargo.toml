@@ -37,3 +37,12 @@ assets = [
   ["target/release/llogin", "usr/bin/","755"],
   ["README.md","usr/share/doc/llogin/README","644"], 
 ]
+
+[package.metadata.rpm]
+package = "llogin"
+
+[package.metadata.rpm.cargo]
+buildflags = ["--release"]
+
+[package.metadata.rpm.targets]
+llogin = { path = "/usr/bin/llogin" }
