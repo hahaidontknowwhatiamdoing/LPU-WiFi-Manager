@@ -50,6 +50,15 @@ sudo apt update
 sudo apt install llogin
 ```
 
+### <img src="./assets/fedora.png" alt="Fedora" height="23" width="23"> Fedora
+
+The tool is available on [COPR](https://copr.fedorainfracloud.org/coprs/smazmi/llogin/) for Fedora users. You can enable the repository and install using the following commands:
+
+```Bash
+sudo dnf copr enable smazmi/llogin
+sudo dnf install llogin
+```
+
 ### <img src="./assets/cargo.png" alt="Crates" height="23" width="23"> Other Systems
 
 The tool is also available on [crates.io](https://crates.io/crates/llogin). You can install it using `cargo`:
