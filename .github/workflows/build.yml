@@ -1,0 +1,31 @@
+name: Build macOS Binary
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Build for macOS (Apple Silicon)
+        run: |
+          cd llogin
+          cargo build --release --target aarch64-apple-darwin
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llogin-macos-aarch64
+          path: llogin/target/aarch64-apple-darwin/release/llogin
