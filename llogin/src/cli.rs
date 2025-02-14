@@ -1,125 +1,97 @@
-//! Command-line interface module for the LPU WiFi Manager
-//!
-//! This module handles:
-//! - Command line argument parsing
-//! - User input prompts
-//! - Help and version information
-//! - Account management commands
+// src/cli.rs
 
-use std::env;
-use std::io::{self, Write};
-use std::process;
+use clap::{Args, Parser, Subcommand};
 
-/// Handles command line arguments and executes appropriate actions
-///
-/// # Arguments
-/// * `args` - Vector of command line arguments
-///
-/// # Example
-/// ```no_run
-/// use std::env;
-/// let args: Vec<String> = env::args().collect();
-/// llogin::cli::handle_args(args);
-/// ```
-///
-/// # Command Line Options
-/// - `--help, -h`: Show help message
-/// - `--version, -v`: Show version information
-/// - `--list, -l`: List stored accounts
-/// - `--account, -a <id>`: Login with specified account
-/// - `--logout, -lg <id>`: Logout specified account
-///
-/// # Exit Codes
-/// - 0: Success
-/// - 1: Error (invalid arguments, network error, etc)
-pub fn handle_args(args: Vec<String>) {
-    if args.len() == 1 {
-        println!("No account ID provided.");
-        let account_id = prompt_for_account_id();
-        crate::login::perform_lpu_login(&account_id);
-    } else {
-        match args[1].as_str() {
-            "--help" | "-h" => show_help(),
-            "--version" | "-v" => show_version(),
-            "--account" | "-a" => {
-                if args.len() != 3 {
-                    println!("Error: Please provide an account ID.");
-                    process::exit(1);
-                } else {
-                    crate::login::perform_lpu_login(&args[2]);
-                }
-            }
-            "--list" | "-l" => list_account_ids(),
-            "--logout" | "-lg" => {
-                if args.len() != 3 {
-                    println!("Error: Please provide an account ID.");
-                    process::exit(1);
-                } else {
-                    crate::login::perform_lpu_logout(&args[2]);
-                }
-            }
-            _ => {
-                println!("Error: Unknown option. Use --help for usage information.");
-                process::exit(1);
-            }
-        }
-    }
+/// LPU WiFi Manager: A CLI tool for managing Lovely Professional University WiFi connections.
+#[derive(Parser)]
+#[command(
+    author = "smazmi",
+    version,
+    about = "Manage and log in to multiple LPU WiFi accounts",
+    long_about = "LPU WiFi Manager allows you to store credentials for multiple accounts, log in to the LPU WiFi network, and manage your connections."
+)]
+pub struct Cli {
+    /// Command to execute
+    #[command(subcommand)]
+    pub command: Option<Commands>,
 }
 
-/// Prompts user for an account identifier
-///
-/// # Returns
-/// String containing the user-entered account ID
-///
-/// # Panics
-/// Panics if:
-/// - Unable to flush stdout
-/// - Unable to read from stdin
-fn prompt_for_account_id() -> String {
-    print!("Enter the account ID or Name: ");
-    io::stdout().flush().unwrap();
-    let mut account_id = String::new();
-    io::stdin().read_line(&mut account_id).unwrap();
-    account_id.trim().to_string()
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Login using a stored account ID or create a new one
+    #[command(about = "Login using a stored account ID or create a new one")]
+    Login(LoginArgs),
+    /// Logout from a specified account or the current session
+    #[command(about = "Logout from a specified account or the current session")]
+    Logout {
+        /// Account ID or Name to logout from
+        #[arg(value_name = "ACCOUNT_ID", help = "The account ID to logout from")]
+        account_id: Option<String>,
+    },
+    /// List all stored account IDs
+    #[command(about = "List all stored account IDs")]
+    List,
+    /// Remove stored accounts
+    #[command(about = "Remove stored account(s)")]
+    Remove {
+        /// Account IDs or Names to remove
+        #[arg(value_name = "ACCOUNT_ID", help = "The account ID(s) to remove")]
+        account_ids: Vec<String>,
+    },
+    /// Update stored account details
+    #[command(about = "Update stored account(s)")]
+    Update {
+        /// Account ID or Name to update
+        #[arg(value_name = "ACCOUNT_ID", help = "The account ID to update")]
+        account_id: Option<String>,
+    },
+    /// Show stored account details
+    #[command(about = "Show stored account details")]
+    Show(ShowArgs),
 }
 
-/// Displays program usage information
-///
-/// Shows:
-/// - Basic usage syntax
-/// - Available commands
-/// - Command descriptions
-fn show_help() {
-    println!("Usage: {} [OPTION]", env::args().next().unwrap());
-    println!("Manage and log in to multiple LPU WiFi accounts.");
-    println!();
-    println!("Options:");
-    println!(" --help    , -h    Show this help message and exit.");
-    println!(" --version , -v    Show version information and exit.");
-    println!(" --list    , -l    List all stored account IDs.");
-    println!(" --account , -a    Followed by the account ID you want to login as.");
-    println!(" --logout  , -lg   Followed by the account ID you want to logout from.");
+#[derive(Args)]
+pub struct LoginArgs {
+    /// Account ID or Name to login with
+    #[arg(
+        value_name = "ACCOUNT_ID",
+        help = "The account ID to login with",
+        required = false
+    )]
+    pub account_id: Option<String>,
+
+    /// Do not save credentials
+    #[arg(long, help = "Login without saving credentials")]
+    pub no_save: bool,
+
+    /// LPU username (without @lpu.com), used with --no-save
+    #[arg(
+        long,
+        requires = "no_save",
+        help = "LPU username (used with --no-save)"
+    )]
+    pub username: Option<String>,
+
+    /// LPU password, used with --no-save
+    #[arg(
+        long,
+        requires = "no_save",
+        help = "LPU password (used with --no-save)"
+    )]
+    pub password: Option<String>,
 }
 
-/// Displays program version information
-fn show_version() {
-    println!("LPU WiFi Manager 0.2.1");
-}
+#[derive(Args)]
+pub struct ShowArgs {
+    /// Account ID or Name to show
+    #[arg(
+        value_name = "ACCOUNT_ID",
+        help = "The account ID to show",
+        required = false
+    )]
+    pub account_id: Option<String>,
 
-/// Lists all stored account identifiers
-///
-/// Reads credentials from storage and displays:
-/// - Account IDs in a list format
-/// - Message if no accounts are stored
-fn list_account_ids() {
-    let credentials = crate::credentials::read_credentials();
-
-    if credentials.is_empty() {
-        println!("No stored accounts found.");
-    } else {
-        println!("Stored account IDs:");
-        for account_id in credentials.keys() {
-            println!("- {}", account_id);
-        }
-    }
+    /// Show the password in plaintext
+    #[arg(short, long, help = "Show the password in plaintext")]
+    pub show_password: bool,
 }

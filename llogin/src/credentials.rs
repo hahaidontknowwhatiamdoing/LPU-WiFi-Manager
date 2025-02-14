@@ -1,16 +1,12 @@
-//! Credential management module for LPU WiFi Manager
-//!
-//! This module handles secure storage and retrieval of WiFi credentials:
-//! - Stores credentials in system-specific config directories
-//! - Manages multiple account credentials
-//! - Provides JSON-based persistent storage
+// src/credentials.rs
 
+use colored::*;
+use dialoguer::{console::Term, theme::ColorfulTheme, Input, Password};
 use dirs_next::config_dir;
-use rpassword::read_password;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 
 /// Represents stored credentials for an LPU WiFi account
@@ -23,19 +19,9 @@ pub struct Credentials {
 }
 
 /// Type alias for a HashMap storing account IDs mapped to their credentials
-type CredentialsMap = HashMap<String, Credentials>;
+pub type CredentialsMap = HashMap<String, Credentials>;
 
 /// Gets the path to the credentials file in the system config directory
-///
-/// # Returns
-/// A PathBuf pointing to credentials.json in the system-specific config location:
-/// - Linux: ~/.config/llogin/credentials.json
-/// - Windows: %APPDATA%/llogin/credentials.json
-///
-/// # Panics
-/// Panics if:
-/// - Unable to determine system config directory
-/// - Unable to create llogin directory
 fn get_credentials_file_path() -> PathBuf {
     let config_dir = config_dir().expect("Failed to get config directory");
     let llogin_dir = config_dir.join("llogin");
@@ -46,16 +32,6 @@ fn get_credentials_file_path() -> PathBuf {
 }
 
 /// Reads stored credentials from the credentials file
-///
-/// # Returns
-/// A HashMap containing account IDs mapped to their credentials.
-/// Returns an empty HashMap if no credentials file exists.
-///
-/// # Panics
-/// Panics if:
-/// - Unable to open credentials file
-/// - File contains invalid JSON
-/// - JSON doesn't match expected credential format
 pub fn read_credentials() -> CredentialsMap {
     let path = get_credentials_file_path();
     if path.exists() {
@@ -68,15 +44,6 @@ pub fn read_credentials() -> CredentialsMap {
 }
 
 /// Writes credentials to the credentials file
-///
-/// # Arguments
-/// * `credentials` - HashMap containing account IDs and their credentials
-///
-/// # Panics
-/// Panics if:
-/// - Unable to open/create credentials file
-/// - Unable to write to file
-/// - Unable to serialize credentials to JSON
 fn write_credentials(credentials: &CredentialsMap) {
     let path = get_credentials_file_path();
     let file = OpenOptions::new()
@@ -86,50 +53,62 @@ fn write_credentials(credentials: &CredentialsMap) {
         .open(path)
         .expect("Failed to open credentials file");
     let writer = BufWriter::new(file);
-    serde_json::to_writer(writer, credentials).expect("Failed to write credentials");
+    serde_json::to_writer_pretty(writer, credentials).expect("Failed to write credentials");
 }
 
-/// Prompts user for and stores new LPU WiFi credentials
-///
-/// Interactively asks for:
-/// - Account identifier
-/// - LPU username
-/// - LPU password
-///
-/// The password is read securely without echo.
-/// Credentials are stored in the system config directory.
-///
-/// # Example
-/// ```no_run
-/// llogin::credentials::store_lpu_credentials();
-/// // Enter a unique identifier for this account: myaccount
-/// // Enter your LPU username: 12345678
-/// // Enter your LPU password: ****
-/// ```
-///
-/// # Notes
-/// - Will not overwrite existing credentials for the same account ID
-/// - Password is never displayed on screen
-pub fn store_lpu_credentials() {
-    print!("Enter a unique identifier for this account: ");
-    io::stdout().flush().unwrap();
-    let account_id = prompt_for_account_id();
+/// Checks if an account ID exists
+pub fn account_exists(account_id: &str) -> bool {
+    let credentials = read_credentials();
+    credentials.contains_key(account_id)
+}
 
+/// Stores new LPU WiFi credentials using dialoguer
+pub fn store_new_account_dialogue(default_account_id: &str) -> String {
     let mut credentials = read_credentials();
+    let theme = ColorfulTheme::default();
+    let term = Term::stdout();
 
-    if credentials.contains_key(&account_id) {
-        println!("Credentials already exist for account ID '{}'.", account_id);
-        return;
-    }
+    println!("{}", "\nCreating New Account".bright_blue().bold());
 
-    print!("Enter your LPU username: ");
-    io::stdout().flush().unwrap();
-    let mut username = String::new();
-    io::stdin().read_line(&mut username).unwrap();
+    // Prompt for a unique account ID
+    let account_id: String = loop {
+        let input: String = Input::with_theme(&theme)
+            .with_prompt("Enter a unique identifier for this account")
+            .with_initial_text(default_account_id)
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.trim().is_empty() {
+                    Err("Account ID cannot be empty.")
+                } else if credentials.contains_key(input.trim()) {
+                    Err("An account with this ID already exists. Please choose a different ID.")
+                } else {
+                    Ok(())
+                }
+            })
+            .interact_text_on(&term)
+            .unwrap();
 
-    print!("Enter your LPU password: ");
-    io::stdout().flush().unwrap();
-    let password = read_password().unwrap();
+        break input.trim().to_string();
+    };
+
+    // Prompt for username
+    let username: String = Input::with_theme(&theme)
+        .with_prompt("Enter your LPU username (without @lpu.com)")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if input.trim().is_empty() {
+                Err("Username cannot be empty.")
+            } else {
+                Ok(())
+            }
+        })
+        .interact_text_on(&term)
+        .unwrap();
+
+    // Prompt for password with confirmation
+    let password: String = Password::with_theme(&theme)
+        .with_prompt("Enter your LPU password")
+        .with_confirmation("Confirm your password", "Passwords do not match.")
+        .interact_on(&term)
+        .unwrap();
 
     credentials.insert(
         account_id.clone(),
@@ -141,18 +120,200 @@ pub fn store_lpu_credentials() {
 
     write_credentials(&credentials);
 
-    println!("LPU username and password have been stored securely.");
+    println!(
+        "{}",
+        format!("✓ Account '{}' has been stored successfully", account_id).bright_green()
+    );
+    println!(); // Add a blank line for better readability
+
+    account_id
 }
 
-/// Prompts for and reads an account identifier from stdin
-///
-/// # Returns
-/// The trimmed account identifier string entered by the user
-///
-/// # Panics
-/// Panics if unable to read from stdin
-fn prompt_for_account_id() -> String {
-    let mut account_id = String::new();
-    io::stdin().read_line(&mut account_id).unwrap();
-    account_id.trim().to_string()
+/// Lists all stored account identifiers
+pub fn list_account_ids() {
+    use crate::login::get_current_logged_in_user;
+    let credentials = read_credentials();
+
+    if credentials.is_empty() {
+        println!("{}", "No stored accounts found.".bright_yellow());
+    } else {
+        println!("{}", "Stored account IDs:".bright_blue());
+
+        // Get currently logged in user if any
+        let current_user =
+            get_current_logged_in_user().map(|u| u.trim_end_matches("@lpu.com").to_string());
+
+        for (account_id, creds) in &credentials {
+            let display_text = format!("- {} ({})", account_id, creds.username);
+
+            // If this account matches the currently logged in user
+            if let Some(ref current_username) = current_user {
+                if current_username == &creds.username {
+                    println!(
+                        "{} {}",
+                        display_text.bright_green(),
+                        "← Currently logged in".bright_green().italic()
+                    );
+                    continue;
+                }
+            }
+
+            // Normal display for other accounts
+            println!("{}", display_text.bright_white());
+        }
+    }
+}
+
+/// Removes specified accounts from the stored credentials
+pub fn remove_accounts(account_ids: &[String]) {
+    let mut credentials = read_credentials();
+
+    let mut removed = false;
+    for account_id in account_ids {
+        if credentials.remove(account_id).is_some() {
+            println!(
+                "{}",
+                format!("✗ Removed account '{}'", account_id).bright_red()
+            );
+            removed = true;
+        } else {
+            println!(
+                "{}",
+                format!("! Account '{}' not found", account_id).bright_yellow()
+            );
+        }
+    }
+
+    if removed {
+        write_credentials(&credentials);
+        println!("{}", "✓ Credentials updated successfully".bright_green());
+    } else {
+        println!("{}", "! No accounts were removed".bright_yellow());
+    }
+}
+
+/// Updates the details of a stored account
+pub fn update_account(account_id: &str) {
+    let mut credentials = read_credentials();
+
+    if let Some(creds) = credentials.get(account_id) {
+        let original_account_id = account_id.to_string();
+
+        println!(
+            "\n{}",
+            format!("Updating account '{}'", account_id)
+                .bright_blue()
+                .bold()
+        );
+        let theme = ColorfulTheme::default();
+        let term = Term::stdout();
+
+        // Prompt for new account ID (name)
+        let new_account_id: String = Input::with_theme(&theme)
+            .with_prompt("Enter new account ID (press Enter to keep current)")
+            .default(original_account_id.clone())
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.trim().is_empty() {
+                    Err("Account ID cannot be empty.")
+                } else if input.trim() != original_account_id
+                    && credentials.contains_key(input.trim())
+                {
+                    Err("An account with this ID already exists. Please choose a different ID.")
+                } else {
+                    Ok(())
+                }
+            })
+            .interact_text_on(&term)
+            .unwrap();
+
+        // Prompt for new username
+        let new_username: String = Input::with_theme(&theme)
+            .with_prompt("Enter new LPU username (press Enter to keep current)")
+            .default(creds.username.clone())
+            .validate_with(|input: &String| -> Result<(), &str> {
+                if input.trim().is_empty() {
+                    Err("Username cannot be empty.")
+                } else {
+                    Ok(())
+                }
+            })
+            .interact_text_on(&term)
+            .unwrap();
+
+        // Prompt for new password
+        let new_password = Password::with_theme(&theme)
+            .with_prompt("Enter new LPU password (leave blank to keep current)")
+            .with_confirmation("Confirm your password", "Passwords do not match.")
+            .allow_empty_password(true)
+            .interact()
+            .unwrap();
+
+        // Prepare updated credentials
+        let updated_creds = Credentials {
+            username: new_username.trim().to_string(),
+            password: if new_password.is_empty() {
+                creds.password.clone()
+            } else {
+                new_password
+            },
+        };
+
+        // Update credentials map
+        if new_account_id != original_account_id {
+            credentials.remove(account_id);
+            credentials.insert(new_account_id.clone(), updated_creds);
+            println!(
+                "{}",
+                format!(
+                    "✓ Account ID changed from '{}' to '{}'",
+                    original_account_id, new_account_id
+                )
+                .bright_green()
+            );
+        } else {
+            credentials.insert(account_id.to_string(), updated_creds);
+        }
+
+        // Write updated credentials
+        write_credentials(&credentials);
+        println!("{}", "✓ Account updated successfully".bright_green());
+    } else {
+        println!(
+            "{}",
+            format!("✗ Account '{}' not found", account_id).bright_red()
+        );
+    }
+}
+
+/// Shows the details of a stored account
+pub fn show_account(account_id: &str, show_password: bool) {
+    let credentials = read_credentials();
+
+    if let Some(creds) = credentials.get(account_id) {
+        println!("\n{}", "Account Details:".bright_blue().bold());
+        println!("Account ID: {}", account_id.bright_white());
+        println!("Username: {}", creds.username.bright_white());
+        if show_password {
+            // Provide a confirmation before displaying the password
+            use dialoguer::Confirm;
+            let proceed = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Are you sure you want to display the password in plaintext?")
+                .default(false)
+                .interact()
+                .unwrap();
+
+            if proceed {
+                println!("Password: {}", creds.password.bright_white());
+            } else {
+                println!("Password: {}", "[hidden]".bright_yellow());
+            }
+        } else {
+            println!("Password: {}", "[hidden]".bright_yellow());
+        }
+    } else {
+        println!(
+            "{}",
+            format!("✗ Account '{}' not found", account_id).bright_red()
+        );
+    }
 }

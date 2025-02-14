@@ -1,3 +1,5 @@
+// src/lib.rs
+
 //! LPU WiFi Manager: A CLI tool for managing Lovely Professional University WiFi connections.
 //!
 //! This crate provides functionality to:
@@ -10,9 +12,9 @@
 //! # Usage
 //! ```bash
 //! llogin --help    # Show help
-//! llogin --account <myaccount>  # Login with stored account
-//! llogin --logout <myaccount>   # Logout from account
-//! llogin --list    # List stored accounts
+//! llogin login <myaccount>  # Login with stored account
+//! llogin logout <myaccount>   # Logout from account
+//! llogin list    # List stored accounts
 //! ```
 
 pub mod cli;
