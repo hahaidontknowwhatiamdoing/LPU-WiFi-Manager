@@ -48,6 +48,17 @@ pub enum Commands {
     /// Show stored account details
     #[command(about = "Show stored account details")]
     Show(ShowArgs),
+    /// Manage default account settings
+    #[command(about = "Set or clear default account for quick login")]
+    Default {
+        /// Account ID to set as default. If not provided, shows selection menu
+        #[arg(value_name = "ACCOUNT_ID")]
+        account_id: Option<String>,
+        
+        /// Clear default account setting
+        #[arg(long, conflicts_with = "account_id")]
+        clear: bool,
+    },
 }
 
 #[derive(Args)]
@@ -79,6 +90,10 @@ pub struct LoginArgs {
         help = "LPU password (used with --no-save)"
     )]
     pub password: Option<String>,
+
+    /// Set this account as default after login
+    #[arg(long, help = "Set this account as default for quick login")]
+     pub set_default: bool,
 }
 
 #[derive(Args)]

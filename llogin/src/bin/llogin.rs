@@ -28,6 +28,15 @@ fn main() {
 
     match &cli.command {
         Some(llogin::cli::Commands::Login(args)) => {
+            if args.set_default && args.account_id.is_some() {
+                if let Some(id) = &args.account_id {
+                    if let Err(e) = llogin::credentials::set_default_account(id) {
+                        println!("{}", e.bright_red());
+                        std::process::exit(1);
+                    }
+                    println!("{}", format!("✓ Set '{}' as default account", id).bright_green());
+                }
+            }
             if args.no_save {
                 let username = args.username.clone().unwrap_or_else(|| prompt_username());
                 let password = args.password.clone().unwrap_or_else(|| prompt_password());
@@ -164,39 +173,123 @@ fn main() {
             }
         }
 
-        None => match interactive_account_selection_with_context(SelectionContext::Login) {
-            LoginAction::UseExistingAccount(id) => {
-                llogin::login::perform_lpu_login(&id);
-            }
-            LoginAction::NewAccount => {
-                let new_id = llogin::credentials::store_new_account_dialogue("");
-                let proceed = confirm_action(&format!(
-                    "Would you like to login with the newly created account '{}'?",
-                    new_id
-                ));
-                if proceed {
-                    llogin::login::perform_lpu_login(&new_id);
-                } else {
-                    println!("{}", "Login skipped.".bright_yellow());
+        Some(llogin::cli::Commands::Default { account_id, clear }) => {
+            if *clear {
+                llogin::credentials::clear_default_account();
+                println!("{}", "✓ Cleared default account setting".bright_green());
+            } else if let Some(id) = account_id {
+                // Direct flag usage - just set default without asking to login
+                if let Err(e) = llogin::credentials::set_default_account(id) {
+                    println!("{}", e.bright_red());
+                    std::process::exit(1);
+                }
+                println!("{}", format!("✓ Set '{}' as default account", id).bright_green());
+            } else {
+                // Show interactive selection with clear option
+                let mut account_ids: Vec<String> = llogin::credentials::read_credentials()
+                    .iter()
+                    .map(|(id, creds)| {
+                        if creds.is_default {
+                            format!("{} {}", id, "(default)".bright_black())
+                        } else {
+                            id.clone()
+                        }
+                    })
+                    .collect();
+                
+                // Add clear option at the end
+                account_ids.push("[Clear Default]".bright_red().to_string());
+
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Select an account to set as default")
+                    .items(&account_ids)
+                    .default(0)
+                    .interact_opt()
+                    .unwrap();
+
+                match selection {
+                    Some(index) if index == account_ids.len() - 1 => {
+                        // Clear default was selected
+                        llogin::credentials::clear_default_account();
+                        println!("{}", "✓ Cleared default account setting".bright_green());
+                    }
+                    Some(index) => {
+                        let selected = &account_ids[index];
+                        let id = selected.split_whitespace().next().unwrap();
+                        
+                        if let Err(e) = llogin::credentials::set_default_account(id) {
+                            println!("{}", e.bright_red());
+                            std::process::exit(1);
+                        }
+                        println!("{}", format!("✓ Set '{}' as default account", id).bright_green());
+
+                        // Ask if user wants to login with the new default account
+                        let proceed = confirm_action(&format!(
+                            "Would you like to login with the newly set default account '{}'?",
+                            id
+                        ));
+                        if proceed {
+                            llogin::login::perform_lpu_login(id);
+                        }
+                    }
+                    None => {
+                        println!("Operation cancelled.");
+                        std::process::exit(0);
+                    }
                 }
             }
-            LoginAction::TemporaryLogin => {
-                println!("{}", "\nTemporary Login".bright_yellow().bold());
-                let username = prompt_username();
-                let password = prompt_password();
-                llogin::login::perform_temporary_login(&username, &password);
+        }
+
+        None => {
+            // Check for default account first
+            if let Some(default_id) = llogin::credentials::get_default_account() {
+                llogin::login::perform_lpu_login(&default_id);
+            } else {
+                // Existing interactive selection logic
+                match interactive_account_selection_with_context(SelectionContext::Login) {
+                    LoginAction::UseExistingAccount(id) => {
+                        llogin::login::perform_lpu_login(&id);
+                    }
+                    LoginAction::NewAccount => {
+                        let new_id = llogin::credentials::store_new_account_dialogue("");
+                        let proceed = confirm_action(&format!(
+                            "Would you like to login with the newly created account '{}'?",
+                            new_id
+                        ));
+                        if proceed {
+                            llogin::login::perform_lpu_login(&new_id);
+                        } else {
+                            println!("{}", "Login skipped.".bright_yellow());
+                        }
+                    }
+                    LoginAction::TemporaryLogin => {
+                        println!("{}", "\nTemporary Login".bright_yellow().bold());
+                        let username = prompt_username();
+                        let password = prompt_password();
+                        llogin::login::perform_temporary_login(&username, &password);
+                    }
+                    LoginAction::Cancel => {
+                        println!("Operation cancelled.");
+                        std::process::exit(0);
+                    }
+                }
             }
-            LoginAction::Cancel => {
-                println!("Operation cancelled.");
-                std::process::exit(0);
-            }
-        },
+        }
     }
 }
 
 fn interactive_account_selection_with_context(context: SelectionContext) -> LoginAction {
     let credentials = llogin::credentials::read_credentials();
-    let mut account_ids: Vec<String> = credentials.keys().cloned().collect();
+    let mut account_ids: Vec<String> = credentials
+        .iter()
+        .map(|(id, creds)| {
+            if creds.is_default {
+                format!("{} {}", id, "(default)".bright_black())
+            } else {
+                id.clone()
+            }
+        })
+        .collect();
 
     // Only add special options for Login context
     match context {
@@ -329,5 +422,3 @@ fn confirm_action(message: &str) -> bool {
         .interact()
         .unwrap()
 }
-
-

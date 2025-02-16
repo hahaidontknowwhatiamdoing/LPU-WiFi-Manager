@@ -16,6 +16,8 @@ pub struct Credentials {
     pub username: String,
     /// Account password
     pub password: String,
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 /// Type alias for a HashMap storing account IDs mapped to their credentials
@@ -115,6 +117,7 @@ pub fn store_new_account_dialogue(default_account_id: &str) -> String {
         Credentials {
             username: username.trim().to_string(),
             password: password.trim().to_string(),
+            is_default: false,
         },
     );
 
@@ -256,6 +259,7 @@ pub fn update_account(account_id: &str) {
             } else {
                 new_password
             },
+            is_default: creds.is_default,
         };
 
         // Update credentials map
@@ -316,4 +320,45 @@ pub fn show_account(account_id: &str, show_password: bool) {
             format!("✗ Account '{}' not found", account_id).bright_red()
         );
     }
+}
+
+/// Sets an account as the default login account
+pub fn set_default_account(account_id: &str) -> Result<(), String> {
+    let mut credentials = read_credentials();
+    
+    if !credentials.contains_key(account_id) {
+        return Err(format!("Account '{}' not found", account_id));
+    }
+    
+    // Clear any existing default
+    for (_, creds) in credentials.iter_mut() {
+        creds.is_default = false;
+    }
+    
+    // Set new default
+    if let Some(creds) = credentials.get_mut(account_id) {
+        creds.is_default = true;
+        write_credentials(&credentials);
+        Ok(())
+    } else {
+        Err("Failed to set default account".to_string())
+    }
+}
+
+/// Clears default account setting
+pub fn clear_default_account() {
+    let mut credentials = read_credentials();
+    for (_, creds) in credentials.iter_mut() {
+        creds.is_default = false;
+    }
+    write_credentials(&credentials);
+}
+
+/// Gets the default account ID if one exists
+pub fn get_default_account() -> Option<String> {
+    let credentials = read_credentials();
+    credentials
+        .iter()
+        .find(|(_, creds)| creds.is_default)
+        .map(|(id, _)| id.clone())
 }
