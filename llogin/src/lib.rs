@@ -18,6 +18,13 @@
 //! ```
 
 pub mod cli;
+pub mod commands;
 pub mod credentials;
+pub mod dialogues;
+pub mod helpers;
 pub mod login;
+pub mod types;
 pub mod wifi;
+
+// Re-export commonly used types
+pub use types::{LoginAction, SelectionContext};
